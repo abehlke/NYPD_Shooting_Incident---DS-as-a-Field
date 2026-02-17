@@ -1,0 +1,117 @@
+---
+title: "NYPD Shooting Analysis"
+author: "Anna Behlke"
+date: "2026-02-08"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lubridate)
+library(hms)
+library(scales)
+library(broom)
+```
+
+## Introduction
+
+This project analyzes the NYPD Shooting Incident dataset to examine trends over time, differences across boroughs, victim demographics, and factors associated with fatal outcomes.
+
+## Data Preparation
+Packages used: tidyverse, lubridate, hms, scales, broom
+Cleaned data: mutate occur_date, occur time, year, create binary for fatal, filter by is not !is.na for occur_date, BORO, VIC_AGE_GROUP, VIC_SEX
+```{r}
+shootings <- read_csv("NYPD_Shooting_Incident_Data__Historic_.csv")
+
+shootings_clean <- shootings %>%
+  mutate(
+    occur_date = mdy(OCCUR_DATE),
+    occur_time = as_hms(OCCUR_TIME),
+    year = year(occur_date),
+    fatal = if_else(STATISTICAL_MURDER_FLAG == TRUE, 1, 0)
+  ) %>%
+  filter(
+    !is.na(occur_date),
+    !is.na(BORO),
+    !is.na(VIC_AGE_GROUP),
+    !is.na(VIC_SEX)
+  )
+
+summary(shootings_clean)
+```
+
+## Exploratory Data Analysis
+
+### Shootings Over Time
+
+```{r}
+shootings_clean %>%
+  count(year) %>%
+  ggplot(aes(year, n)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "NYPD Shooting Incidents Over Time",
+    x = "Year",
+    y = "Number of Shootings"
+  )
+```
+
+### Shootings by Borough
+
+```{r}
+shootings_clean %>%
+  count(BORO) %>%
+  ggplot(aes(reorder(BORO, n), n)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Shooting Incidents by Borough",
+    x = "Borough",
+    y = "Number of Shootings"
+  )
+```
+
+### Fatal vs Non-Fatal by Victim Age Group
+
+```{r}
+shootings_clean %>%
+  ggplot(aes(VIC_AGE_GROUP, fill = factor(fatal))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = percent) +
+  labs(
+    title = "Fatal vs Non-Fatal Shootings by Victim Age Group",
+    x = "Victim Age Group",
+    y = "Proportion",
+    fill = "Fatal"
+  )
+```
+
+## Modeling
+Create logistic regression model using the cleaned data to determine if fatality is realated to victim age, sex, and borough.
+```{r}
+model_data <- shootings_clean %>%
+  select(fatal, VIC_AGE_GROUP, VIC_SEX, BORO) %>%
+  drop_na()
+
+fatal_model <- glm(
+  fatal ~ VIC_AGE_GROUP + VIC_SEX + BORO,
+  data = model_data,
+  family = binomial
+)
+
+summary(fatal_model)
+tidy(fatal_model, exponentiate = TRUE, conf.int = TRUE)
+```
+
+## Bias and Limitations
+
+This dataset includes only NYPD-reported incidents and may reflect reporting bias, missing demographic data, and changes in policing practices over time. The model is exploratory and does not imply causation.
+
+## Conclusion
+
+The analysis shows variation in shooting incidents over time and across boroughs, with differences in fatal outcomes across victim demographics. Further analysis could include spatial or policy-related factors.
